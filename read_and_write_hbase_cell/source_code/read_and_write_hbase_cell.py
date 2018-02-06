@@ -42,8 +42,8 @@ def save_data_to_cell(data_tuple_list, con, table_name, row_key, cf):
             data_qualifier_prefix = "row_"
             dtype_column_value = dict()
             series_name_value = dict()
-            dtype_column_value[':'.join((cf, dtype_column_qualifier))] = data.dtypes.name
-            series_name_value[':'.join((cf, series_name_qualifier))] = data.name
+            dtype_column_value[':'.join((cf, dtype_column_qualifier))] = str(data.dtypes.name)
+            series_name_value[':'.join((cf, series_name_qualifier))] = str(data.name)
             with table.batch(transaction=True) as b:
                 b.put(row_key, dtype_column_value)
                 b.put(row_key, series_name_value)
