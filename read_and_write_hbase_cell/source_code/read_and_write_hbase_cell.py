@@ -144,7 +144,7 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
             value = value.decode()
             try:
                 value = eval(value)
-            except NameError:
+            except :
                 pass
             res[data_key] = value
     return res
