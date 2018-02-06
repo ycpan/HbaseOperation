@@ -88,12 +88,17 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
             except NameError:
                 columnsType = value.decode()
             columnsType_cf = cf
+
     if columnsOrder_cf is not None:
         cell.pop(columnsOrder_cf)
     if SeriesName_cf is not None:
         cell.pop(SeriesName_cf)
     if columnsType_cf is not None:
         cell.pop(columnsType_cf)
+    cell_keys = cell.keys()
+
+    if columnsOrder_cf in cell_keys or SeriesName_cf in cell_keys or columnsType_cf in cell_keys:
+        raise ValueError('two data input one cell')
 
     if 'DataFrame' in type_set:
         res = pd.DataFrame()
@@ -111,16 +116,16 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
             if column == '':
                 continue
             try:
-                res[column] = pd.to_numeric(res[column])
+                res[str(column)] = pd.to_numeric(res[str(column)])
             except ValueError:
                 pass
-            res[column] = res[column].astype(np.dtype(data_type))
+            res[str(column)] = res[str(column)].astype(np.dtype(data_type))
     if 'Series' in type_set:
         res = pd.Series()
         for cf, value in cell.items():
             cf_qualifier = cf.decode().split(':')[1]
             data_index = cf_qualifier.split('_')[1]
-            df_sub = df_sub = pd.Series(value.decode(), index=[data_index])
+            df_sub = pd.Series(value.decode(), index=[data_index])
 
             res = res.append(df_sub)
         if SeriesName is not None:
