@@ -98,8 +98,9 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
     cell_keys = cell.keys()
 
     if columnsOrder_cf in cell_keys or SeriesName_cf in cell_keys or columnsType_cf in cell_keys:
-        raise ValueError('two data input one cell')
-
+        raise ValueError('more than one data input one cell')
+    if len(type_set) > 2:
+        raise ValueError('more than one data input one cell')
     if 'DataFrame' in type_set:
         res = pd.DataFrame()
         for cf, value in cell.items():
