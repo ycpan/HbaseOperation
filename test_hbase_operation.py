@@ -71,9 +71,9 @@ def test_dic_cell():
 
 
 if __name__ == "__main__":
-    table_name = 'test_cell2'
+    table_name = 'test_cell3'
     try:
-        hb = HBaseOperation('43.247.185.201', 9034)
+        hb = HBaseOperation('127.0.0.1', 9090)
         table_cf = {str('test_Series'): dict(max_versions=10),
                     str('test_DataFrame'): dict(max_versions=10),
                     str('others'): dict(max_versions=10)}

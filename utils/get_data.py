@@ -9,6 +9,8 @@ import re
 from sqlalchemy.engine import create_engine
 import time
 from datetime import datetime, timezone, timedelta
+
+
 # from utils.conf import sql_db_configs
 
 
@@ -37,7 +39,7 @@ def get_pickle_data(path):
         return pickle.load(file)
 
 
-def get_df_from_hbase(con, table_name, key, cf='hb'):
+def get_df_from_hbase(con, table_name, key, cf='hb', timestamp=None, include_timestamp=False):
     """Read a pandas DataFrame object from HBase table.
 
     Arguments:
@@ -55,11 +57,12 @@ def get_df_from_hbase(con, table_name, key, cf='hb'):
     table = con.table(table_name)
 
     column_dtype_key = key + 'columns'
-    column_dtype = table.row(column_dtype_key, columns=[cf])
+    column_dtype = table.row(column_dtype_key, columns=[cf], timestamp=timestamp, include_timestamp=include_timestamp)
     columns = {col.decode().split(':')[1]: value.decode() for col, value in column_dtype.items()}
 
     column_order_key = key + 'column_order'
-    column_order_dict = table.row(column_order_key, columns=[cf])
+    column_order_dict = table.row(column_order_key, columns=[cf], timestamp=timestamp,
+                                  include_timestamp=include_timestamp)
     column_order = list()
     for i in range(len(column_order_dict)):
         column_order.append(column_order_dict[bytes(':'.join((cf, str(i))), encoding='utf-8')].decode())
@@ -93,10 +96,12 @@ def get_df_from_hbase(con, table_name, key, cf='hb'):
     return df
 
 
-def get_data_from_cell(con, table_name, row_key, cf='hb'):
+def get_specify_maximum_version_from_cell(con, table_name, row_key, cf='hb', timestamp=None, include_timestamp=False):
     table = con.table(table_name)
 
-    cell = table.row(row_key, columns=[cf])
+    cell = table.row(row_key, columns=[cf], timestamp=timestamp, include_timestamp=include_timestamp)
+    # cell1 = table.cells(row_key, column=cf, versions=5, timestamp=timestamp,
+    #           include_timestamp=True)
     type_set = set()
     columnsOrder = None
     SeriesName = None
@@ -106,6 +111,11 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
     columnsType_cf = None
     res = None
     for cf, value in cell.items():
+        if len(value) == 2:
+            value, ts = value
+        else:
+            value = value
+            ts = None
         cf_qualifier = cf.decode().split(':')[1]
         data_type = cf_qualifier.split('_')[0]
         type_set.add(data_type)
@@ -133,11 +143,20 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
 
     if columnsOrder_cf in cell_keys or SeriesName_cf in cell_keys or columnsType_cf in cell_keys:
         raise ValueError('more than one clean_log input one cell')
-    if len(type_set) > 2:
-        raise ValueError('more than one clean_log input one cell')
+    # if len(type_set) > 2:
+    #     raise ValueError('more than one clean_log input one cell')
+    # if len(type_set) >= 2:
+    #     raise ValueError('in one cell may have two data type, this can not deal it')
+
     if 'DataFrame' in type_set:
+        if len(type_set) > 2:
+            raise ValueError('in one cell may have two data type, this can not deal it')
         res = pd.DataFrame()
         for cf, value in cell.items():
+            if len(value) == 2:
+                value, _ = value
+            else:
+                value = value
             cf_qualifier = cf.decode().split(':')[1]
             data_index = cf_qualifier.split('_')[1]
             value = eval(value.decode())
@@ -155,9 +174,15 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
             except ValueError:
                 pass
             res[str(column)] = res[str(column)].astype(np.dtype(data_type))
-    if 'Series' in type_set:
+    elif 'Series' in type_set:
+        if len(type_set) > 2:
+            raise ValueError('in one cell may have two data type, this can not deal it')
         res = pd.Series()
         for cf, value in cell.items():
+            if len(value) == 2:
+                value, _ = value
+            else:
+                value = value
             cf_qualifier = cf.decode().split(':')[1]
             data_index = cf_qualifier.split('_')[1]
             df_sub = pd.Series(value.decode(), index=[data_index])
@@ -170,9 +195,23 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
         except ValueError:
             pass
         res = res.astype(np.dtype(columnsType))
-    if 'Others' in type_set:
+    elif 'dict' in type_set:
+        if len(type_set) >= 2:
+            raise ValueError('in one cell may have two data type, this can not deal it')
+        # for cf, value in cell.items():
+        if len(value) == 2:
+            value, _ = value
+        else:
+            value = value
+        res = eval(value.decode())
+
+    else:
         res = dict()
         for cf, value in cell.items():
+            if len(value) == 2:
+                value, _ = value
+            else:
+                value = value
             cf_qualifier = cf.decode().split(':')[1]
             data_key = cf_qualifier.split('_')[1]
             # value = value.decode()
@@ -183,162 +222,22 @@ def get_data_from_cell(con, table_name, row_key, cf='hb'):
             except:
                 pass
             res[data_key] = value
+    if ts is not None:
+        return res, ts
     return res
 
 
-# def _get_data_from_influxdb(db_name, db_table, sql_cmd, port=18097):
-#     from requests.exceptions import ChunkedEncodingError
-#     from influxdb.exceptions import InfluxDBClientError
-#     from json.decoder import JSONDecodeError
-#     from influxdb.exceptions import InfluxDBServerError
-#     host = 'db.cnecloud.cn'
-#     port = '{}'.format(port)
-#     user = ''
-#     password = ''
-#     # protocol='json'
-#     client = DataFrameClient(host, port, user, password, db_name)
-#     # atmost retry 3 times
-#     for i in range(4):
-#         try:
-#             dic_res = client.query(sql_cmd)
-#         except (ChunkedEncodingError, InfluxDBClientError, JSONDecodeError, InfluxDBServerError) as e:
-#             if i < 3:
-#                 print('Exception: {}, try again'.format(e))
-#                 time.sleep(3)
-#                 if isinstance(e, InfluxDBServerError):
-#                     time.sleep(120)
-#             else:
-#                 print('Achieve Maximun Retrying Times, reraise error')
-#                 raise
-#         else:
-#             break
-#     try:
-#         data_frame_res = dic_res[db_table]
-#     except KeyError:
-#         return None
-#     return data_frame_res
-#
-#
-# def get_data_from_influxdb(db_name, db_table, sql_cmd, start_time=None, end_time=None, port=18097):
-#     """get data from inluxdb. auto select port by time range
-#
-#     Arguments:
-#         db_name {str} -- database name
-#         db_table {str} -- table name (measure name)
-#         sql_cmd {str} -- sql command. "@start_time" and "@end_time" will be replaced by start_time and end_time respectively
-#
-#     Keyword Arguments:
-#         start_time {datetime.datetime} -- query start time. Used to determine the database port (default: {None})
-#         end_time {datetime.datetime} -- query end time.  Used to determine the database port(default: {None})
-#         port {int} -- database port, if neither start_time or end_time is set, will use this port
-# forcibly (default: {18097})
-#
-#     Returns:
-#         pandas.DataFrame -- query data result
-#     """
-#     if start_time == None and end_time == None:
-#         return _get_data_from_influxdb(db_name, db_table, sql_cmd, port)
-#     if isinstance(start_time, str):
-#         start_time = datetime.strptime(start_time, '%Y-%m-%d').replace(tzinfo=timezone(timedelta(hours=8)))
-#     if isinstance(end_time, str):
-#         end_time = datetime.strptime(end_time, '%Y-%m-%d').replace(tzinfo=timezone(timedelta(hours=8)))
-#
-#     dt_sp_time = datetime.strptime('2017-12-20', '%Y-%m-%d').replace(tzinfo=timezone(timedelta(hours=8)))
-#     port = None
-#     if start_time is not None and start_time >= dt_sp_time:
-#         port = 18096
-#     if end_time is not None and end_time <= dt_sp_time:
-#         port = 18097
-#     sql_cmd = sql_cmd.replace("@start_time", start_time.strftime("%Y-%m-%d %H:%M:%S"))
-#     sql_cmd = sql_cmd.replace("@end_time", end_time.strftime("%Y-%m-%d %H:%M:%S"))
-#     if port is not None:
-#         return _get_data_from_influxdb(db_name, db_table, sql_cmd, port=port)
-#
-#     data1 = _get_data_from_influxdb(db_name, db_table, sql_cmd, port=18097)
-#     data2 = _get_data_from_influxdb(db_name, db_table, sql_cmd, port=18096)
-#     if data1 is None:
-#         return data2
-#     elif data2 is None:
-#         return data1
-#     return pd.concat([data1, data2])
+def get_specify_versions_data_from_cell(con, table_name, row_key, cf='hb', versions=None, timestamp=None, include_timestamp=False):
+    table = con.table(table_name)
 
-
-# sql_db_configs = {
-#     "PowerP_His": {
-#         "db_user": 'dbreader@cnedb',
-#         "db_pass": '0182@CNE',
-#         "db_host": 'cnedb.database.chinacloudapi.cn',
-#         "db_port": 1433,
-#         "db_name": 'PowerP_His'
-#     },
-#     "PowerP_BI": {
-#         "db_user": 'dbreader@cnedb',
-#         "db_pass": '0182@CNE',
-#         "db_host": 'cnedb.database.chinacloudapi.cn',
-#         "db_port": 1433,
-#         "db_name": 'PowerP_BI'
-#     },
-#     "PowerP_Base": {
-#         "db_user": 'dbreader@cnedb',
-#         "db_pass": '0182@CNE',
-#         "db_host": 'cnedb.database.chinacloudapi.cn',
-#         "db_port": 1433,
-#         "db_name": 'PowerP_Base'
-#     },
-#     "ALGORITHM": {
-#         "db_user": 'algoRoot@ffowgrtwpa',
-#         "db_pass": 'algoAdmin123',
-#         "db_host": 'ffowgrtwpa.database.chinacloudapi.cn',
-#         "db_name": 'ALGORITHM'
-#     }
-# }
-
-
-def get_sql_engine(db_user, db_pass, db_host, db_name, db_port=1433):
-    connect_info = "mssql+pymssql://{}:{}@{}:{}/{}?charset=utf8".format(db_user, db_pass, db_host, db_port, db_name)
-    engine = create_engine(connect_info)
-    return engine
-
-
-def get_data_from_sql(sql_cmd, db_config='PowerP_His'):
-    if type(db_config) is str:
-        db_config = sql_db_configs[db_config]
-    engine = get_sql_engine(**db_config)
-    df = pd.read_sql(sql=sql_cmd, con=engine)
-    return df
-
-
-def get_device_code(station_code, device_type):
-    engine = get_sql_engine(**sql_db_configs['PowerP_His'])
-    sql_cmd = 'SELECT DISTINCT DeviceCode FROM  V_Device  WHERE  StationCode ={}'.format(station_code)
-    df = pd.read_sql(sql=sql_cmd, con=engine)['DeviceCode']
-    # pattern = re.compile(r'M110M')
-    # match = pattern.match(df)
-    # res = [re.findall('(^[0-9]+M101M.*)', item) for item in df]
+    # cell = table.row(row_key, columns=[cf], timestamp=timestamp, include_timestamp=include_timestamp)
+    cell = table.cells(row_key, column=cf, versions=versions, timestamp=timestamp,
+              include_timestamp=True)
+    ts_set = set()
+    for _, ts in cell:
+        ts_set.add(ts)
     res = []
-    for item in df:
-        m = re.match('(^[0-9]+M{}M.*)'.format(device_type), item)
-        if m is not None:
-            n = m.group()
-            res.append(n)
-
+    for ts in ts_set:
+        res.append(get_specify_maximum_version_from_cell(con, table_name, row_key, cf, ts+1, include_timestamp))
     return res
-
-
-def get_ALOGRITHM_sql_engine():
-    engine = get_sql_engine(**sql_db_configs['ALGORITHM'])
-    return engine
-
-
-def get_station_name(station_code):
-    """
-    :param station_code: 
-    :type int
-    :return: station name
-    """
-    engine = get_sql_engine(**sql_db_configs['PowerP_His'])
-    sql_cmd = "SELECT StationName from Station WHERE  StationCode ={}".format(station_code)
-    station_name = pd.read_sql(sql=sql_cmd, con=engine)['StationName'][0]
-    return station_name
-
 
