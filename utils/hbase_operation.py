@@ -7,7 +7,8 @@ class HBaseOperation(Connection):
     def __init__(self, host, port=9090):
         self.host = host
         self.port = port
-        super(HBaseOperation, self).__init__(self.host, self.port)
+        super(HBaseOperation, self).__init__(self.host, self.port,)
+
 
     def _re_init(self):
         import time
@@ -88,3 +89,13 @@ class HBaseOperation(Connection):
         if data is None:
             return None
         return data['default']
+
+    def create_HBase_table(self, table_name, table_cf: dict):
+        self.create_table(table_name, families=table_cf)
+
+    def is_table_exists(self, table_name):
+        table_names = self.tables()
+        if bytes(table_name, encoding='utf-8') not in table_names:
+            return False
+        else:
+            return True
