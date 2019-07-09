@@ -1,7 +1,7 @@
 from happybase import Connection
-from utils.save_data import save_data_to_cell
-from utils.get_data import get_specify_maximum_version_from_cell
-from utils.get_data import get_specify_versions_data_from_cell
+from .save_data import save_data_to_cell
+from .get_data import get_specify_maximum_version_from_cell
+from .get_data import get_specify_versions_data_from_cell
 
 
 class HBaseOperation(Connection):

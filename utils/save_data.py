@@ -2,7 +2,6 @@ import pickle
 import pandas as pd
 import struct
 import time
-from sqlalchemy.engine import create_engine
 
 
 def save_to_pickle(path, data):

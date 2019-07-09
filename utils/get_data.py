@@ -6,7 +6,6 @@ import numpy as np
 import sys
 # from influxdb import DataFrameClient
 import re
-from sqlalchemy.engine import create_engine
 import time
 from datetime import datetime, timezone, timedelta
 

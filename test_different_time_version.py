@@ -1,5 +1,5 @@
 # from utils.log_to_hbase import Log_To_HBase
-from utils.hbase_operation import HBaseOperation
+from .utils.hbase_operation import HBaseOperation
 import datetime
 import time
 import pandas as pd
